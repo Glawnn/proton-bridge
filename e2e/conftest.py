@@ -76,13 +76,15 @@ def write_config(
     """Écrit un config.toml dans le répertoire APPDATA du test."""
     config_dir = Path(appdata) / "proton-bridge"
     config_dir.mkdir(parents=True, exist_ok=True)
+    # Échapper les backslashes Windows pour le TOML (ex: C:\Users -> C:\\Users)
+    log_path_escaped = log_path.replace("\\", "\\\\")
     config_content = f"""[qbittorrent]
 url = "{url}"
 username = "{username}"
 password = "{password}"
 
 [proton]
-log_path = "{log_path}"
+log_path = "{log_path_escaped}"
 
 [general]
 log_level = "debug"
