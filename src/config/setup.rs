@@ -110,6 +110,8 @@ pub async fn ensure_config() -> Result<Config> {
         general: GeneralSettings {
             log_level: setup.log_level,
             poll_interval_seconds: setup.poll_interval_seconds,
+            auto_update: true,
+            check_interval_hours: 24,
         },
     };
 

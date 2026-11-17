@@ -6,7 +6,40 @@ on:
       - 'v*'
 
 jobs:
+  e2e-update-tests:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Installation de Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Mise en cache des dépendances Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Installation de Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Dépendances Python (pytest)
+        run: pip install -r e2e/requirements.txt
+
+      - name: Compilation Release
+        run: cargo build --release
+
+      - name: Tests E2E Updater (pytest)
+        run: pytest e2e/test_update.py -v
+
   release:
+    needs: e2e-update-tests
     runs-on: windows-latest
     permissions:
       contents: write
@@ -29,19 +62,21 @@ jobs:
       - name: Compilation Release
         run: cargo build --release
 
-      - name: Lister le binaire produit
-        run: Get-ChildItem -Path "target/release" -Filter "proton-bridge*"
-
-      - name: Copie du binaire à la racine
+      - name: Copie des binaires à la racine
         run: |
           if (Test-Path "target/release/proton-bridge.exe") {
             Copy-Item "target/release/proton-bridge.exe" -Destination "proton-bridge.exe"
+          }
+          if (Test-Path "target/release/proton-bridge-updater.exe") {
+            Copy-Item "target/release/proton-bridge-updater.exe" -Destination "proton-bridge-updater.exe"
           }
 
       - name: Création de la release GitHub
         uses: softprops/action-gh-release@v2
         with:
-          files: proton-bridge.exe
+          files: |
+            proton-bridge.exe
+            proton-bridge-updater.exe
           generate_release_notes: true
           draft: false
           prerelease: false

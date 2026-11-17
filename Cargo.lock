@@ -931,6 +931,7 @@ dependencies = [
  "chrono",
  "regex",
  "reqwest",
+ "semver",
  "serde",
  "serde_json",
  "tokio",
