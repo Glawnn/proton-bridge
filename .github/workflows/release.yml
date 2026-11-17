@@ -8,6 +8,8 @@ on:
 jobs:
   release:
     runs-on: windows-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout du code
         uses: actions/checkout@v4
@@ -27,10 +29,13 @@ jobs:
       - name: Compilation Release
         run: cargo build --release
 
-      - name: Renommage du binaire pour Windows
+      - name: Lister le binaire produit
+        run: Get-ChildItem -Path "target/release" -Filter "proton-bridge*"
+
+      - name: Copie du binaire à la racine
         run: |
           if (Test-Path "target/release/proton-bridge.exe") {
-            Rename-Item "target/release/proton-bridge.exe" "proton-bridge.exe"
+            Copy-Item "target/release/proton-bridge.exe" -Destination "proton-bridge.exe"
           }
 
       - name: Création de la release GitHub
