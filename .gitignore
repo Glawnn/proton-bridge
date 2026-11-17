@@ -1,1 +1,11 @@
 /target
+.env
+.env.local
+
+# Configuration utilisateur (contient le mot de passe qBittorrent en clair) - ne pas committer
+/proton-bridge/config.toml
+/config.toml
+
+# Logs applicatifs
+/logs/
+/proton-bridge/logs/
