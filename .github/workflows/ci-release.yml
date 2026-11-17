@@ -33,11 +33,37 @@ jobs:
       - name: Vérification (cargo check)
         run: cargo check
 
-      - name: Tests (cargo test)
+      - name: Tests unitaires (cargo test)
         run: cargo test
 
-  release:
+  e2e-tests:
     needs: ci
+    runs-on: windows-latest
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Installation de Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Mise en cache des dépendances Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Compilation Release
+        run: cargo build --release
+
+      - name: Tests E2E (mock qBittorrent + faux logs Proton)
+        shell: pwsh
+        run: .\tests\e2e.ps1
+
+  release:
+    needs: [ci, e2e-tests]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: windows-latest
     steps:
