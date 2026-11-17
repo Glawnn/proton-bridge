@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Installation de Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Mise en cache des dépendances Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Compilation Release
+        run: cargo build --release
+
+      - name: Renommage du binaire pour Windows
+        run: |
+          if (Test-Path "target/release/proton-bridge.exe") {
+            Rename-Item "target/release/proton-bridge.exe" "proton-bridge.exe"
+          }
+
+      - name: Création de la release GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          files: proton-bridge.exe
+          generate_release_notes: true
+          draft: false
+          prerelease: false
