@@ -8,6 +8,10 @@ Reproduit les endpoints utilisés par Proton Bridge :
 L'historique des appels est conservé dans l'objet ``state`` partagé, ce qui
 permet aux tests pytest de vérifier que le binaire Rust a bien (ou pas)
 modifié le port de qBittorrent.
+
+Le mock supporte des défaillances temporaires configurables (ex: les N
+premiers appels à setPreferences échouent puis réussissent) pour tester la
+résilience du bridge.
 """
 
 from __future__ import annotations
@@ -31,9 +35,16 @@ class QBittorrentMock:
             "current_port": 6881,          # port "configuré" dans le mock
             "login_fail": False,
             "set_preferences_fail": False,
+            # Nombre d'appels setPreferences à faire échouer avant de réussir.
+            "set_preferences_fail_count": 0,
+            # Code HTTP renvoyé pendant les échecs (500 par défaut, 403 pour simuler une session expirée).
+            "set_preferences_fail_status_code": 500,
+            # Nombre d'appels login à faire échouer avant de réussir.
+            "login_fail_count": 0,
         }
         self._server: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
+        self._lock = threading.Lock()
 
     # -- cycle de vie -------------------------------------------------------
     def start(self) -> None:
@@ -50,20 +61,50 @@ class QBittorrentMock:
         if self._thread:
             self._thread.join(timeout=5)
 
+    # -- configuration des défaillances ------------------------------------
+    def set_login_fail(self, fail: bool) -> None:
+        with self._lock:
+            self.state["login_fail"] = fail
+
+    def set_set_preferences_fail(self, fail: bool) -> None:
+        with self._lock:
+            self.state["set_preferences_fail"] = fail
+
+    def set_set_preferences_fail_status(self, status_code: int) -> None:
+        with self._lock:
+            self.state["set_preferences_fail_status_code"] = status_code
+
+    def configure_login_fail_count(self, n: int) -> None:
+        """Les n premiers appels à /login échouent, puis réussissent."""
+        with self._lock:
+            self.state["login_fail_count"] = n
+            self.state["login_fail"] = n > 0
+
+    def configure_set_preferences_fail_count(self, n: int, status_code: int = 500) -> None:
+        """Les n premiers appels à setPreferences échouent, puis réussissent."""
+        with self._lock:
+            self.state["set_preferences_fail_count"] = n
+            self.state["set_preferences_fail_status_code"] = status_code
+            self.state["set_preferences_fail"] = n > 0
+
     # -- fabrication du handler avec état partagé ---------------------------
     def _handler_factory(self) -> Callable:
         state = self.state
+        lock = self._lock
 
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self) -> None:  # noqa: N802
                 if self.path == "/api/v2/auth/login":
-                    if state["login_fail"]:
-                        self.send_response(403)
-                        self.end_headers()
-                        return
+                    with lock:
+                        fail_count = state["login_fail_count"]
+                        if fail_count > 0:
+                            state["login_fail_count"] = fail_count - 1
+                            self.send_response(403)
+                            self.end_headers()
+                            return
+                        state["login_calls"] += 1
                     self.send_response(204)
                     self.end_headers()
-                    state["login_calls"] += 1
                     return
 
                 if self.path == "/api/v2/app/setPreferences":
@@ -77,13 +118,20 @@ class QBittorrentMock:
                     except json.JSONDecodeError:
                         port = None
 
-                    if state["set_preferences_fail"] or port is None:
-                        self.send_response(400)
-                        self.end_headers()
-                        return
+                    with lock:
+                        fail_count = state["set_preferences_fail_count"]
+                        if fail_count > 0:
+                            state["set_preferences_fail_count"] = fail_count - 1
+                            self.send_response(state["set_preferences_fail_status_code"])
+                            self.end_headers()
+                            return
+                        if port is None:
+                            self.send_response(400)
+                            self.end_headers()
+                            return
+                        state["set_preferences_calls"].append(port)
+                        state["current_port"] = port
 
-                    state["set_preferences_calls"].append(port)
-                    state["current_port"] = port
                     self.send_response(200)
                     self.end_headers()
                     return
@@ -93,10 +141,12 @@ class QBittorrentMock:
 
             def do_GET(self) -> None:  # noqa: N802
                 if self.path == "/api/v2/app/preferences":
+                    with lock:
+                        port = state["current_port"]
                     self.send_response(200)
                     self.send_header("Content-Type", "application/json")
                     self.end_headers()
-                    prefs = {"listen_port": state["current_port"]}
+                    prefs = {"listen_port": port}
                     self.wfile.write(json.dumps(prefs).encode("utf-8"))
                     return
 
@@ -111,11 +161,14 @@ class QBittorrentMock:
 
     # -- helpers d'assertion ------------------------------------------------
     def last_set_port(self) -> int | None:
-        calls = self.state["set_preferences_calls"]
+        with self._lock:
+            calls = list(self.state["set_preferences_calls"])
         return calls[-1] if calls else None
 
     def set_port_count(self) -> int:
-        return len(self.state["set_preferences_calls"])
+        with self._lock:
+            return len(self.state["set_preferences_calls"])
 
     def reset_calls(self) -> None:
-        self.state["set_preferences_calls"] = []
+        with self._lock:
+            self.state["set_preferences_calls"] = []
