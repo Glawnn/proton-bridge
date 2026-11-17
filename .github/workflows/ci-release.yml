@@ -55,12 +55,19 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
+      - name: Installation de Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Dépendances Python (pytest)
+        run: pip install -r e2e/requirements.txt
+
       - name: Compilation Release
         run: cargo build --release
 
-      - name: Tests E2E (mock qBittorrent + faux logs Proton)
-        shell: pwsh
-        run: .\tests\e2e.ps1
+      - name: Tests E2E (pytest)
+        run: pytest e2e/ -v
 
   release:
     needs: [ci, e2e-tests]
