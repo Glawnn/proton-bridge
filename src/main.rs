@@ -101,7 +101,10 @@ async fn check_and_apply_update() -> Result<()> {
     let updater_path = exe_path.with_file_name("proton-bridge-updater.exe");
 
     if !updater_path.exists() {
-        info!("Updater introuvable ({:?}), mise à jour ignorée.", updater_path);
+        info!(
+            "Updater introuvable ({:?}), mise à jour ignorée.",
+            updater_path
+        );
         return Ok(());
     }
 
@@ -126,11 +129,7 @@ async fn check_and_apply_update() -> Result<()> {
         Ok(state) if state.pending_update => {
             info!("Mise à jour en attente, application via l'updater...");
             let _output = Command::new(&updater_path)
-                .args([
-                    "--do-update",
-                    "--main-exe",
-                    &exe_path.to_string_lossy(),
-                ])
+                .args(["--do-update", "--main-exe", &exe_path.to_string_lossy()])
                 .spawn()?
                 .wait_with_output()
                 .context("Impossible d'exécuter proton-bridge-updater --do-update")?;

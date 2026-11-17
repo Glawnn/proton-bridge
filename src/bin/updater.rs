@@ -1,11 +1,14 @@
-
 use anyhow::{Context, Result};
 use std::env;
 use std::path::PathBuf;
 use std::process::Command;
 
-use crate::update::{read_update_state, update_download_dir, update_state_path, write_update_state, UpdateClient, UpdateState};
+use crate::update::{
+    UpdateClient, UpdateState, read_update_state, update_download_dir, update_state_path,
+    write_update_state,
+};
 
+#[path = "../update.rs"]
 mod update;
 
 #[tokio::main]
@@ -13,7 +16,9 @@ async fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
 
     if args.len() < 2 {
-        anyhow::bail!("Usage: proton-bridge-updater.exe --check [--current-version X.Y.Z] [--main-exe chemin] | --do-update [--main-exe chemin]");
+        anyhow::bail!(
+            "Usage: proton-bridge-updater.exe --check [--current-version X.Y.Z] [--main-exe chemin] | --do-update [--main-exe chemin]"
+        );
     }
 
     let command = &args[1];
@@ -22,8 +27,7 @@ async fn main() -> Result<()> {
         "--check" => {
             let current_version = get_arg(&args, "--current-version")
                 .unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_string());
-            let main_exe = get_arg(&args, "--main-exe")
-                .context("--main-exe est requis avec --check")?;
+            let _main_exe = get_arg(&args, "--main-exe");
 
             let client = UpdateClient::new()?;
             match client.check_for_update(&current_version).await? {
@@ -36,7 +40,9 @@ async fn main() -> Result<()> {
                     let download_dir = update_download_dir()?;
                     let download_path = download_dir.join("proton-bridge.exe");
 
-                    client.download(&release.download_url, &download_path).await?;
+                    client
+                        .download(&release.download_url, &download_path)
+                        .await?;
 
                     let state = UpdateState {
                         pending_update: true,
@@ -51,15 +57,18 @@ async fn main() -> Result<()> {
                     );
                 }
                 None => {
-                    println!("Aucune mise à jour disponible (version {})", current_version);
+                    println!(
+                        "Aucune mise à jour disponible (version {})",
+                        current_version
+                    );
                     // Nettoyer tout état précédent
-                    let _ = std::fs::remove_file(update_state_path());
+                    let _ = std::fs::remove_file(update_state_path()?);
                 }
             }
         }
         "--do-update" => {
-            let main_exe = get_arg(&args, "--main-exe")
-                .context("--main-exe est requis avec --do-update")?;
+            let main_exe =
+                get_arg(&args, "--main-exe").context("--main-exe est requis avec --do-update")?;
 
             let state = read_update_state()?;
             if !state.pending_update {
@@ -67,19 +76,13 @@ async fn main() -> Result<()> {
                 return Ok(());
             }
 
-            let new_version = state
-                .new_version
-                .as_deref()
-                .unwrap_or("inconnue");
+            let new_version = state.new_version.as_deref().unwrap_or("inconnue");
             let download_path = state
                 .download_path
                 .as_deref()
                 .context("Chemin de téléchargement manquant dans l'état de mise à jour")?;
 
-            println!(
-                "Application de la mise à jour {} ...",
-                new_version
-            );
+            println!("Application de la mise à jour {} ...", new_version);
 
             let exe_path = PathBuf::from(main_exe);
             if !exe_path.exists() {

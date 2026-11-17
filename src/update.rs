@@ -1,4 +1,3 @@
-
 use anyhow::{Context, Result};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -42,7 +41,11 @@ impl Default for UpdateState {
 /// %APPDATA%\proton-bridge\update-state.json
 pub fn update_state_path() -> Result<PathBuf> {
     env::var("APPDATA")
-        .map(|p| PathBuf::from(p).join("proton-bridge").join("update-state.json"))
+        .map(|p| {
+            PathBuf::from(p)
+                .join("proton-bridge")
+                .join("update-state.json")
+        })
         .context("La variable d'environnement APPDATA est introuvable (Windows requis)")
 }
 
@@ -79,19 +82,18 @@ impl UpdateClient {
             .with_context(|| format!("Impossible de contacter l'API GitHub Releases ({url})"))?;
 
         if !response.status().is_success() {
-            anyhow::bail!(
-                "API GitHub Releases a retourné HTTP {}",
-                response.status()
-            );
+            anyhow::bail!("API GitHub Releases a retourné HTTP {}", response.status());
         }
 
-        let release: GitHubRelease = response.json().await.context("Impossible de parser la réponse GitHub")?;
+        let release: GitHubRelease = response
+            .json()
+            .await
+            .context("Impossible de parser la réponse GitHub")?;
 
         let remote_version = release.tag_name.trim_start_matches('v');
-        let current = semver::Version::parse(current_version)
-            .context("Version actuelle invalide")?;
-        let remote = semver::Version::parse(remote_version)
-            .context("Version distante invalide")?;
+        let current =
+            semver::Version::parse(current_version).context("Version actuelle invalide")?;
+        let remote = semver::Version::parse(remote_version).context("Version distante invalide")?;
 
         if remote <= current {
             return Ok(None);
@@ -125,15 +127,14 @@ impl UpdateClient {
             .context("Impossible de télécharger la mise à jour")?;
 
         if !response.status().is_success() {
-            anyhow::bail!(
-                "Échec du téléchargement (HTTP {})",
-                response.status()
-            );
+            anyhow::bail!("Échec du téléchargement (HTTP {})", response.status());
         }
 
-        let bytes = response.bytes().await.context("Impossible de lire le corps de la réponse")?;
-        std::fs::write(dest, &bytes)
-            .with_context(|| format!("Impossible d'écrire {:?}", dest))?;
+        let bytes = response
+            .bytes()
+            .await
+            .context("Impossible de lire le corps de la réponse")?;
+        std::fs::write(dest, &bytes).with_context(|| format!("Impossible d'écrire {:?}", dest))?;
 
         Ok(())
     }
@@ -157,18 +158,17 @@ pub fn write_update_state(state: &UpdateState) -> Result<()> {
     let path = update_state_path()?;
     let content = serde_json::to_string_pretty(state)
         .context("Impossible de sérialiser l'état de mise à jour")?;
-    std::fs::write(&path, content)
-        .with_context(|| format!("Impossible d'écrire {:?}", path))?;
+    std::fs::write(&path, content).with_context(|| format!("Impossible d'écrire {:?}", path))?;
     Ok(())
 }
 
 /// Lit l'état de mise à jour depuis le fichier partagé.
 pub fn read_update_state() -> Result<UpdateState> {
     let path = update_state_path()?;
-    let content = std::fs::read_to_string(&path)
-        .with_context(|| format!("Impossible de lire {:?}", path))?;
-    let state: UpdateState = serde_json::from_str(&content)
-        .context("Impossible de parser l'état de mise à jour")?;
+    let content =
+        std::fs::read_to_string(&path).with_context(|| format!("Impossible de lire {:?}", path))?;
+    let state: UpdateState =
+        serde_json::from_str(&content).context("Impossible de parser l'état de mise à jour")?;
     Ok(state)
 }
 
