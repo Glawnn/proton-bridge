@@ -11,6 +11,7 @@ import os
 import subprocess
 import time
 from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Generator
 
@@ -121,28 +122,42 @@ def launch_bridge(binary_path: str, appdata: str) -> Generator[subprocess.Popen,
 
 
 # ---------------------------------------------------------------------------
-# Données de test : lignes de logs Proton simulées
+# Générateur de lignes de logs Proton avec date d'expiration dans le futur
 # ---------------------------------------------------------------------------
 
-LOG_LINE_ACTIVE_63537 = (
-    "2026-11-17T19:53:58.706Z | INFO | PROCESS.COMM | "
-    "Received PortForwarding Status 'SleepingUntilRefresh' triggered at '17/11/2026 19:53:58', "
-    "Port pair 63537->63537, expiring in 00:01:00 at 17/11/2026 19:54:58 | {}"
-)
+def _future_expiry(minutes_from_now: int = 10) -> str:
+    """Retourne une date d'expiration au format Proton (DD/MM/YYYY HH:MM:SS)
+    située dans le futur, pour éviter que le watcher ne considère le mapping
+    comme expiré."""
+    now = datetime.now(timezone.utc)
+    expiry = now + timedelta(minutes=minutes_from_now)
+    return expiry.strftime("%d/%m/%Y %H:%M:%S")
 
-LOG_LINE_ACTIVE_63538 = (
-    "2026-11-17T19:55:58.706Z | INFO | PROCESS.COMM | "
-    "Received PortForwarding Status 'SleepingUntilRefresh' triggered at '17/11/2026 19:55:58', "
-    "Port pair 63538->63538, expiring in 00:01:00 at 17/11/2026 19:56:58 | {}"
-)
 
-LOG_LINE_STOPPED = (
-    "2026-11-17T19:55:00.000Z | INFO | PROCESS.COMM | "
-    "Received PortForwarding Status 'Stopped' triggered at '17/11/2026 19:55:00' | {}"
-)
+def make_active_log_line(port: int, minutes_from_now: int = 10) -> str:
+    """Génère une ligne de log Proton avec un mapping actif sur le port donné,
+    expirant dans le futur."""
+    expiry = _future_expiry(minutes_from_now)
+    triggered = datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M:%S")
+    return (
+        f"2026-11-17T19:53:58.706Z | INFO | PROCESS.COMM | "
+        f"Received PortForwarding Status 'SleepingUntilRefresh' triggered at '{triggered}', "
+        f"Port pair {port}->{port}, expiring in 00:01:00 at {expiry} | {{}}"
+    )
+
+
+def make_stopped_log_line() -> str:
+    """Génère une ligne de log Proton avec statut Stopped."""
+    triggered = datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M:%S")
+    return (
+        f"2026-11-17T19:55:00.000Z | INFO | PROCESS.COMM | "
+        f"Received PortForwarding Status 'Stopped' triggered at '{triggered}' | {{}}"
+    )
+
 
 LOG_LINE_EXPIRED = (
     "2020-01-01T00:00:00.000Z | INFO | PROCESS.COMM | "
     "Received PortForwarding Status 'SleepingUntilRefresh' triggered at '01/01/2020 00:00:00', "
     "Port pair 63537->63537, expiring in 00:01:00 at 01/01/2020 00:01:00 | {}"
 )
+

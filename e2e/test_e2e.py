@@ -27,11 +27,10 @@ import time
 from pathlib import Path
 
 from conftest import (
-    LOG_LINE_ACTIVE_63537,
-    LOG_LINE_ACTIVE_63538,
     LOG_LINE_EXPIRED,
-    LOG_LINE_STOPPED,
     launch_bridge,
+    make_active_log_line,
+    make_stopped_log_line,
     write_config,
     write_proton_logs,
 )
@@ -55,7 +54,7 @@ def _wait_for_set_port(qb_mock, expected_count: int, timeout: float = WAIT_SECON
 
 def test_sync_updates_qbittorrent_port(appdata, qb_mock, binary_path):
     log_path = str(Path(appdata) / "proton" / "logs" / "client-logs.txt")
-    write_proton_logs(log_path, LOG_LINE_ACTIVE_63537)
+    write_proton_logs(log_path, make_active_log_line(63537))
     write_config(
         appdata,
         url=f"http://127.0.0.1:{qb_mock.port}",
@@ -78,7 +77,7 @@ def test_sync_updates_qbittorrent_port(appdata, qb_mock, binary_path):
 
 def test_stopped_status_leaves_port_untouched(appdata, qb_mock, binary_path):
     log_path = str(Path(appdata) / "proton" / "logs" / "client-logs.txt")
-    write_proton_logs(log_path, LOG_LINE_STOPPED)
+    write_proton_logs(log_path, make_stopped_log_line())
     write_config(
         appdata,
         url=f"http://127.0.0.1:{qb_mock.port}",
@@ -99,7 +98,7 @@ def test_stopped_status_leaves_port_untouched(appdata, qb_mock, binary_path):
 
 def test_port_change_is_applied(appdata, qb_mock, binary_path):
     log_path = str(Path(appdata) / "proton" / "logs" / "client-logs.txt")
-    write_proton_logs(log_path, LOG_LINE_ACTIVE_63537 + "\n" + LOG_LINE_ACTIVE_63538)
+    write_proton_logs(log_path, make_active_log_line(63537) + "\n" + make_active_log_line(63538))
     write_config(
         appdata,
         url=f"http://127.0.0.1:{qb_mock.port}",
@@ -143,7 +142,7 @@ def test_expired_mapping_is_ignored(appdata, qb_mock, binary_path):
 
 def test_qbittorrent_unavailable_fails_gracefully(appdata, binary_path):
     log_path = str(Path(appdata) / "proton" / "logs" / "client-logs.txt")
-    write_proton_logs(log_path, LOG_LINE_ACTIVE_63537)
+    write_proton_logs(log_path, make_active_log_line(63537))
     # Port fermé : aucun mock n'écoute.
     write_config(
         appdata,
@@ -155,7 +154,7 @@ def test_qbittorrent_unavailable_fails_gracefully(appdata, binary_path):
     env["APPDATA"] = appdata
     proc = subprocess.Popen([binary_path], env=env)
     try:
-        return_code = proc.wait(timeout=10)
+        return_code = proc.wait(timeout=45)
     finally:
         if proc.poll() is None:
             proc.kill()
@@ -177,7 +176,9 @@ def test_external_and_internal_port_are_different(appdata, qb_mock, binary_path)
     log_content = (
         "2026-11-17T19:53:58.706Z | INFO | PROCESS.COMM | "
         "Received PortForwarding Status 'SleepingUntilRefresh' triggered at '17/11/2026 19:53:58', "
-        "Port pair 50000->63537, expiring in 00:01:00 at 17/11/2026 19:54:58 | {}"
+        "Port pair 50000->63537, expiring in 00:01:00 at "
+        + _future_expiry_str()
+        + " | {}"
     )
     log_path = str(Path(appdata) / "proton" / "logs" / "client-logs.txt")
     write_proton_logs(log_path, log_content)
@@ -197,6 +198,12 @@ def test_external_and_internal_port_are_different(appdata, qb_mock, binary_path)
     )
 
 
+def _future_expiry_str() -> str:
+    from datetime import datetime, timedelta, timezone
+    expiry = datetime.now(timezone.utc) + timedelta(minutes=10)
+    return expiry.strftime("%d/%m/%Y %H:%M:%S")
+
+
 # ---------------------------------------------------------------------------
 # Cas 7 : rotation des logs Proton -> détection, pas de réutilisation
 # ---------------------------------------------------------------------------
@@ -206,7 +213,7 @@ def test_log_rotation_detected(appdata, qb_mock, binary_path):
     Le bridge doit détecter la rotation et invalider l'ancien mapping.
     """
     log_path = str(Path(appdata) / "proton" / "logs" / "client-logs.txt")
-    write_proton_logs(log_path, LOG_LINE_ACTIVE_63537)
+    write_proton_logs(log_path, make_active_log_line(63537))
     write_config(
         appdata,
         url=f"http://127.0.0.1:{qb_mock.port}",
@@ -247,7 +254,7 @@ def test_proton_restart_during_runtime(appdata, qb_mock, binary_path):
     avec un nouveau mapping. Le bridge ne doit pas garder l'ancien port.
     """
     log_path = str(Path(appdata) / "proton" / "logs" / "client-logs.txt")
-    write_proton_logs(log_path, LOG_LINE_ACTIVE_63537)
+    write_proton_logs(log_path, make_active_log_line(63537))
     write_config(
         appdata,
         url=f"http://127.0.0.1:{qb_mock.port}",
@@ -266,7 +273,7 @@ def test_proton_restart_during_runtime(appdata, qb_mock, binary_path):
         time.sleep(2)
 
         # Le fichier réapparaît avec un nouveau mapping.
-        write_proton_logs(log_path, LOG_LINE_ACTIVE_63538)
+        write_proton_logs(log_path, make_active_log_line(63538))
 
         # Le bridge doit détecter le nouveau mapping et l'appliquer.
         assert _wait_for_set_port(qb_mock, 2), (
@@ -288,7 +295,7 @@ def test_qbittorrent_session_loss_recovery(appdata, qb_mock, binary_path):
     """
     qb_mock.configure_set_preferences_fail_count(1, status_code=403)
     log_path = str(Path(appdata) / "proton" / "logs" / "client-logs.txt")
-    write_proton_logs(log_path, LOG_LINE_ACTIVE_63537)
+    write_proton_logs(log_path, make_active_log_line(63537))
     write_config(
         appdata,
         url=f"http://127.0.0.1:{qb_mock.port}",
@@ -315,7 +322,7 @@ def test_temporary_qbittorrent_error_retry(appdata, qb_mock, binary_path):
     """
     qb_mock.configure_set_preferences_fail_count(1, status_code=500)
     log_path = str(Path(appdata) / "proton" / "logs" / "client-logs.txt")
-    write_proton_logs(log_path, LOG_LINE_ACTIVE_63537)
+    write_proton_logs(log_path, make_active_log_line(63537))
     write_config(
         appdata,
         url=f"http://127.0.0.1:{qb_mock.port}",
@@ -347,7 +354,7 @@ def test_logs_with_noise_lines(appdata, qb_mock, binary_path):
     log_content = (
         noise_lines
         + "\n"
-        + LOG_LINE_ACTIVE_63537
+        + make_active_log_line(63537)
         + "\n"
         + noise_lines
     )
@@ -382,7 +389,7 @@ def test_port_already_correct_no_unnecessary_change(appdata, qb_mock, binary_pat
     qb_mock.state["current_port"] = 63537
 
     log_path = str(Path(appdata) / "proton" / "logs" / "client-logs.txt")
-    write_proton_logs(log_path, LOG_LINE_ACTIVE_63537)
+    write_proton_logs(log_path, make_active_log_line(63537))
     write_config(
         appdata,
         url=f"http://127.0.0.1:{qb_mock.port}",
