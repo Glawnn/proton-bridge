@@ -18,3 +18,7 @@ toml = "0.8"
 semver = "1.0"
 
 [package.metadata]
+
+[[bin]]
+name = "proton-bridge-updater"
+path = "src/bin/updater.rs"
