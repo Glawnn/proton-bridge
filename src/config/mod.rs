@@ -34,7 +34,9 @@ pub struct ProtonSettings {
 pub struct GeneralSettings {
     pub log_level: String,
     pub poll_interval_seconds: u64,
+    #[serde(default)]
     pub auto_update: bool,
+    #[serde(default)]
     pub check_interval_hours: u64,
 }
 
