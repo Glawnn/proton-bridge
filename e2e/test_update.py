@@ -169,7 +169,12 @@ def test_update_check_same_version(updater_path: str, github_mock: GitHubMockSer
 
 def test_update_check_new_version(updater_path: str, github_mock: GitHubMockServer, tmp_path: Path):
     """Une mise à jour est disponible : téléchargement et écriture de l'état."""
-    GitHubMockHandler.release_payload = RELEASE_NEW_VERSION
+    GitHubMockHandler.release_payload = {
+        "tag_name": "v0.2.0",
+        "assets": [
+            {"name": "proton-bridge.exe", "browser_download_url": f"{github_mock.url}/proton-bridge.exe"}
+        ],
+    }
 
     env = os.environ.copy()
     env["PROTON_BRIDGE_GITHUB_API_URL"] = github_mock.url
