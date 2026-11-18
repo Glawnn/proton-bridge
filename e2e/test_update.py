@@ -23,35 +23,19 @@ from typing import Generator
 import pytest
 
 
+def _normalize(text: str) -> str:
+    """Normalise les espaces pour tolérer les espaces insécables (U+00A0) dans le stdout Rust."""
+    return text.replace("\xa0", " ").strip()
+
+
 # ---------------------------------------------------------------------------
 # Mock API GitHub Releases
 # ---------------------------------------------------------------------------
 
-RELEASE_SAME_VERSION = {
-    "tag_name": "v0.1.0",
-    "assets": [
-        {"name": "proton-bridge.exe", "browser_download_url": "http://127.0.0.1:9999/fake.exe"}
-    ],
-}
-
-RELEASE_NEW_VERSION = {
-    "tag_name": "v0.2.0",
-    "assets": [
-        {"name": "proton-bridge.exe", "browser_download_url": "http://127.0.0.1:9999/proton-bridge.exe"}
-    ],
-}
-
-RELEASE_NO_ASSETS = {
-    "tag_name": "v0.2.0",
-    "assets": [],
-}
-
-
 class GitHubMockHandler(BaseHTTPRequestHandler):
     """Handler HTTP qui simule l'API GitHub Releases."""
 
-    # Quel release renvoyer (configuré avant le démarrage du serveur)
-    release_payload: dict = RELEASE_SAME_VERSION
+    release_payload: dict = {}
 
     def do_GET(self):  # noqa: N802
         if self.path == "/repos/Glawnn/proton-bridge/releases/latest":
@@ -62,7 +46,6 @@ class GitHubMockHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
         elif self.path == "/proton-bridge.exe":
-            # Fake binaire de mise à jour
             body = b"FAKE_UPDATER_BINARY_CONTENT"
             self.send_response(200)
             self.send_header("Content-Type", "application/octet-stream")
@@ -74,7 +57,7 @@ class GitHubMockHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
     def log_message(self, format: str, *args) -> None:  # noqa: A002
-        pass  # Masquer les logs HTTP
+        pass
 
 
 class GitHubMockServer:
@@ -145,7 +128,12 @@ def fake_main_exe(tmp_path: Path) -> str:
 
 def test_update_check_same_version(updater_path: str, github_mock: GitHubMockServer):
     """Aucune mise à jour si la version distante est identique."""
-    GitHubMockHandler.release_payload = RELEASE_SAME_VERSION
+    GitHubMockHandler.release_payload = {
+        "tag_name": "v0.1.0",
+        "assets": [
+            {"name": "proton-bridge.exe", "browser_download_url": f"{github_mock.url}/fake.exe"}
+        ],
+    }
 
     env = os.environ.copy()
     env["PROTON_BRIDGE_GITHUB_API_URL"] = github_mock.url
@@ -159,7 +147,7 @@ def test_update_check_same_version(updater_path: str, github_mock: GitHubMockSer
     )
 
     assert result.returncode == 0, f"Updater a échoué : {result.stderr}"
-    assert "Aucune mise à jour disponible" in result.stdout
+    assert "Aucune mise à jour disponible" in _normalize(result.stdout)
 
     # Aucun fichier d'état ne doit être créé
     state_path = Path(os.environ["APPDATA"]) / "proton-bridge" / "update-state.json"
@@ -178,7 +166,6 @@ def test_update_check_new_version(updater_path: str, github_mock: GitHubMockServ
 
     env = os.environ.copy()
     env["PROTON_BRIDGE_GITHUB_API_URL"] = github_mock.url
-    # Rediriger APPDATA vers le tmp_path pour isoler le test
     env["APPDATA"] = str(tmp_path / "appdata")
 
     result = subprocess.run(
@@ -190,10 +177,9 @@ def test_update_check_new_version(updater_path: str, github_mock: GitHubMockServ
     )
 
     assert result.returncode == 0, f"Updater a échoué : {result.stderr}"
-    assert "Mise à jour disponible : 0.2.0" in result.stdout
-    assert "Mise à jour téléchargée" in result.stdout
+    assert "Mise à jour disponible : 0.2.0" in _normalize(result.stdout)
+    assert "Mise à jour téléchargée" in _normalize(result.stdout)
 
-    # Vérifier que le fichier d'état a été écrit
     state_path = Path(env["APPDATA"]) / "proton-bridge" / "update-state.json"
     assert state_path.exists(), "Le fichier update-state.json devrait exister"
 
@@ -202,7 +188,6 @@ def test_update_check_new_version(updater_path: str, github_mock: GitHubMockServ
     assert state["new_version"] == "0.2.0"
     assert state["download_path"] is not None
 
-    # Vérifier que le binaire a été téléchargé
     download_path = Path(state["download_path"])
     assert download_path.exists(), "Le binaire téléchargé devrait exister"
     assert download_path.read_bytes() == b"FAKE_UPDATER_BINARY_CONTENT"
@@ -211,7 +196,7 @@ def test_update_check_new_version(updater_path: str, github_mock: GitHubMockServ
 def test_update_check_network_error(updater_path: str):
     """L'updater échoue proprement si l'API GitHub est inaccessible."""
     env = os.environ.copy()
-    env["PROTON_BRIDGE_GITHUB_API_URL"] = "http://127.0.0.1:19999"  # Port fermé
+    env["PROTON_BRIDGE_GITHUB_API_URL"] = "http://127.0.0.1:19999"
 
     result = subprocess.run(
         [updater_path, "--check", "--current-version", "0.1.0", "--main-exe", "fake.exe"],
@@ -227,7 +212,6 @@ def test_update_check_network_error(updater_path: str):
 def test_update_do_update_without_state(updater_path: str, fake_main_exe: str):
     """--do-update sans état en attente ne fait rien."""
     env = os.environ.copy()
-    # S'assurer qu'aucun update-state.json n'existe
     state_path = Path(os.environ["APPDATA"]) / "proton-bridge" / "update-state.json"
     if state_path.exists():
         state_path.unlink()
@@ -241,4 +225,4 @@ def test_update_do_update_without_state(updater_path: str, fake_main_exe: str):
     )
 
     assert result.returncode == 0
-    assert "Aucune mise à jour en attente" in result.stdout
+    assert "Aucune mise à jour en attente" in _normalize(result.stdout)
