@@ -90,6 +90,8 @@ log_path = "{log_path_escaped}"
 [general]
 log_level = "debug"
 poll_interval_seconds = {poll_interval}
+auto_update = true
+check_interval_hours = 24
 """
     config_file = config_dir / "config.toml"
     config_file.write_text(config_content, encoding="utf-8")

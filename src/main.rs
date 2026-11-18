@@ -2,11 +2,14 @@ mod config;
 mod proton;
 mod qbittorrent;
 mod sync;
+mod update;
 
 use anyhow::{Context, Result};
 use config::Config;
 use proton::LogWatcher;
 use qbittorrent::QBittorrentClient;
+use std::env;
+use std::process::Command;
 use sync::sync;
 use tokio::time::{Duration, sleep};
 use tracing::{debug, info, warn};
@@ -34,6 +37,13 @@ async fn main() -> Result<()> {
         config.qbittorrent.username,
         config.proton.log_path.display()
     );
+
+    // Vérification automatique des mises à jour au démarrage.
+    if config.general.auto_update {
+        if let Err(e) = check_and_apply_update().await {
+            warn!("Échec de la vérification de mise à jour : {e:#}");
+        }
+    }
 
     // Connexion à qBittorrent.
     let qbittorrent = QBittorrentClient::new(
@@ -79,6 +89,63 @@ async fn main() -> Result<()> {
 
         sleep(poll_interval).await;
     }
+}
+
+/// Vérifie s'il existe une mise à jour et l'applique si nécessaire.
+///
+/// Lance proton-bridge-updater.exe en mode --check, puis --do-update si une
+/// mise à jour est en attente. Si --do-update est exécuté, le nouveau
+/// executable est lancé et la présente instance se termine.
+async fn check_and_apply_update() -> Result<()> {
+    let exe_path = env::current_exe()?;
+    let updater_path = exe_path.with_file_name("proton-bridge-updater.exe");
+
+    if !updater_path.exists() {
+        info!(
+            "Updater introuvable ({:?}), mise à jour ignorée.",
+            updater_path
+        );
+        return Ok(());
+    }
+
+    let current_version = env!("CARGO_PKG_VERSION");
+
+    info!("Vérification des mises à jour (version {current_version})...");
+
+    let _output = Command::new(&updater_path)
+        .args([
+            "--check",
+            "--current-version",
+            current_version,
+            "--main-exe",
+            &exe_path.to_string_lossy(),
+        ])
+        .spawn()?
+        .wait_with_output()
+        .context("Impossible d'exécuter proton-bridge-updater --check")?;
+
+    // Lecture de l'état partagé pour savoir si une mise à jour est en attente.
+    match update::read_update_state() {
+        Ok(state) if state.pending_update => {
+            info!("Mise à jour en attente, application via l'updater...");
+            let _output = Command::new(&updater_path)
+                .args(["--do-update", "--main-exe", &exe_path.to_string_lossy()])
+                .spawn()?
+                .wait_with_output()
+                .context("Impossible d'exécuter proton-bridge-updater --do-update")?;
+
+            // Le nouvel executable a été lancé par l'updater, on se termine.
+            return Ok(());
+        }
+        Ok(_) => {
+            info!("Aucune mise à jour requise.");
+        }
+        Err(e) => {
+            warn!("Impossible de lire l'état de mise à jour : {e:#}");
+        }
+    }
+
+    Ok(())
 }
 
 fn init_tracing() -> Result<()> {

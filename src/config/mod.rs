@@ -34,6 +34,10 @@ pub struct ProtonSettings {
 pub struct GeneralSettings {
     pub log_level: String,
     pub poll_interval_seconds: u64,
+    #[serde(default)]
+    pub auto_update: bool,
+    #[serde(default)]
+    pub check_interval_hours: u64,
 }
 
 impl Config {
@@ -99,6 +103,8 @@ impl Default for Config {
             general: GeneralSettings {
                 log_level: "info".to_string(),
                 poll_interval_seconds: 3,
+                auto_update: true,
+                check_interval_hours: 24,
             },
         }
     }
@@ -120,4 +126,17 @@ pub fn default_proton_log_path() -> Option<PathBuf> {
     path.push("Logs");
     path.push("client-logs.txt");
     if path.exists() { Some(path) } else { None }
+}
+
+/// %APPDATA%\proton-bridge\update-state.json — fichier d'état échangé
+/// entre proton-bridge.exe et proton-bridge-updater.exe.
+pub fn update_state_path() -> anyhow::Result<PathBuf> {
+    Config::config_dir().map(|p| p.join("update-state.json"))
+}
+
+/// Répertoire de téléchargement temporaire des mises à jour.
+pub fn update_download_dir() -> anyhow::Result<PathBuf> {
+    std::env::var("TEMP")
+        .map(|t| PathBuf::from(t).join("proton-bridge-update"))
+        .context("La variable d'environnement TEMP est introuvable (Windows requis)")
 }
