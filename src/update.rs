@@ -4,13 +4,13 @@ use serde::{Deserialize, Serialize};
 use std::env;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-const GITHUB_API_RELEASES_DEFAULT: &str =
-    "https://api.github.com/repos/Glawnn/proton-bridge/releases/latest";
+const GITHUB_API_BASE_DEFAULT: &str = "https://api.github.com";
+const GITHUB_API_PATH: &str = "/repos/Glawnn/proton-bridge/releases/latest";
 
-/// URL de l'API GitHub Releases (surchargeable via PROTON_BRIDGE_GITHUB_API_URL pour les tests).
-fn github_api_url() -> String {
+/// URL de base de l'API GitHub (surchargeable via PROTON_BRIDGE_GITHUB_API_URL pour les tests).
+fn github_api_base_url() -> String {
     std::env::var("PROTON_BRIDGE_GITHUB_API_URL")
-        .unwrap_or_else(|_| GITHUB_API_RELEASES_DEFAULT.to_string())
+        .unwrap_or_else(|_| GITHUB_API_BASE_DEFAULT.to_string())
 }
 
 /// Infos d'une release GitHub pertinente pour la mise à jour.
@@ -72,7 +72,8 @@ impl UpdateClient {
 
     /// Vérifie s'il existe une version plus récente sur GitHub.
     pub async fn check_for_update(&self, current_version: &str) -> Result<Option<ReleaseInfo>> {
-        let url = github_api_url();
+        let base_url = github_api_base_url();
+        let url = format!("{base_url}{GITHUB_API_PATH}");
         let response = self
             .client
             .get(&url)
@@ -163,10 +164,14 @@ pub fn write_update_state(state: &UpdateState) -> Result<()> {
 }
 
 /// Lit l'état de mise à jour depuis le fichier partagé.
+/// Retourne un état vide si le fichier n'existe pas encore.
 pub fn read_update_state() -> Result<UpdateState> {
     let path = update_state_path()?;
-    let content =
-        std::fs::read_to_string(&path).with_context(|| format!("Impossible de lire {:?}", path))?;
+    if !path.exists() {
+        return Ok(UpdateState::default());
+    }
+    let content = std::fs::read_to_string(&path)
+        .with_context(|| format!("Impossible de lire {:?}", path))?;
     let state: UpdateState =
         serde_json::from_str(&content).context("Impossible de parser l'état de mise à jour")?;
     Ok(state)
