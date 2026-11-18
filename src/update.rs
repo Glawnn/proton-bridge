@@ -157,6 +157,10 @@ struct GitHubAsset {
 /// Écrit l'état de mise à jour dans le fichier partagé.
 pub fn write_update_state(state: &UpdateState) -> Result<()> {
     let path = update_state_path()?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("Impossible de créer {:?}", parent))?;
+    }
     let content = serde_json::to_string_pretty(state)
         .context("Impossible de sérialiser l'état de mise à jour")?;
     std::fs::write(&path, content).with_context(|| format!("Impossible d'écrire {:?}", path))?;

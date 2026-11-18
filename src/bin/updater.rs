@@ -35,7 +35,7 @@ async fn main() -> Result<()> {
             match client.check_for_update(&current_version).await? {
                 Some(release) => {
                     println!(
-                        "Mise a jour disponible : {} (actuelle : {})",
+                        "Mise à jour disponible : {} (actuelle : {})",
                         release.version, current_version
                     );
 
@@ -54,16 +54,16 @@ async fn main() -> Result<()> {
                     write_update_state(&state)?;
 
                     println!(
-                        "Mise a jour telechargee dans {:?}. Redemarrez proton-bridge pour l'appliquer.",
+                        "Mise à jour téléchargée dans {:?}. Redémarrez proton-bridge pour l'appliquer.",
                         download_path
                     );
                 }
                 None => {
                     println!(
-                        "Aucune mise a jour disponible (version {})",
+                        "Aucune mise à jour disponible (version {})",
                         current_version
                     );
-                    // Nettoyer tout etat precedent
+                    // Nettoyer tout état précédent
                     let _ = std::fs::remove_file(update_state_path()?);
                 }
             }
@@ -74,7 +74,7 @@ async fn main() -> Result<()> {
 
             let state = read_update_state()?;
             if !state.pending_update {
-                println!("Aucune mise a jour en attente.");
+                println!("Aucune mise à jour en attente.");
                 return Ok(());
             }
 
@@ -82,17 +82,17 @@ async fn main() -> Result<()> {
             let download_path = state
                 .download_path
                 .as_deref()
-                .context("Chemin de telechargement manquant dans l'etat de mise a jour")?;
+                .context("Chemin de téléchargement manquant dans l'état de mise à jour")?;
 
-            println!("Application de la mise a jour {} ...", new_version);
+            println!("Application de la mise à jour {} ...", new_version);
 
             let exe_path = PathBuf::from(main_exe);
             if !exe_path.exists() {
-                anyhow::bail!("L'executable cible {:?} est introuvable", exe_path);
+                anyhow::bail!("L'exécutable cible {:?} est introuvable", exe_path);
             }
 
-            // Sous Windows, on ne peut pas ecraser un .exe en cours d'execution.
-            // Strategie : renommer l'actuel en .old, deplacer le nouveau, lancer le nouveau.
+            // Sous Windows, on ne peut pas écraser un .exe en cours d'exécution.
+            // Stratégie : renommer l'actuel en .old, déplacer le nouveau, lancer le nouveau.
             let old_path = exe_path.with_extension("exe.old");
 
             // Supprimer un ancien .old s'il existe
@@ -103,13 +103,13 @@ async fn main() -> Result<()> {
 
             // Renommer l'actuel en .old
             std::fs::rename(&exe_path, &old_path)
-                .context("Impossible de renommer l'executable actuel en .old")?;
+                .context("Impossible de renommer l'exécutable actuel en .old")?;
 
-            // Deplacer le nouveau a la place de l'actuel
+            // Déplacer le nouveau à la place de l'actuel
             std::fs::rename(download_path, &exe_path)
-                .context("Impossible de deplacer le nouvel executable a sa place")?;
+                .context("Impossible de déplacer le nouvel exécutable à sa place")?;
 
-            // Marquer l'etat comme applique
+            // Marquer l'état comme appliqué
             let applied_state = UpdateState {
                 pending_update: false,
                 new_version: Some(new_version.to_string()),
@@ -117,20 +117,20 @@ async fn main() -> Result<()> {
             };
             write_update_state(&applied_state)?;
 
-            println!("Mise a jour appliquee. Redemarrage de proton-bridge...");
+            println!("Mise à jour appliquée. Redémarrage de proton-bridge...");
 
             // Lancer la nouvelle version
             Command::new(&exe_path)
                 .spawn()
-                .context("Impossible de relancer proton-bridge apres la mise a jour")?;
+                .context("Impossible de relancer proton-bridge après la mise à jour")?;
 
-            // Supprimer l'ancien .old apres un court delai (le nouveau exe est lance)
+            // Supprimer l'ancien .old après un court délai (le nouveau exe est lancé)
             thread::sleep(Duration::from_secs(2));
             if old_path.exists() {
                 let _ = std::fs::remove_file(&old_path);
             }
 
-            println!("Mise a jour terminee avec succes.");
+            println!("Mise à jour terminée avec succès.");
         }
         _ => {
             anyhow::bail!("Commande inconnue : {}", command);
@@ -140,7 +140,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-/// Recupere la valeur d'un argument nomme (--nom valeur).
+/// Récupère la valeur d'un argument nommé (--nom valeur).
 fn get_arg(args: &[String], name: &str) -> Option<String> {
     args.windows(2).find_map(|pair| {
         if pair[0] == name {
