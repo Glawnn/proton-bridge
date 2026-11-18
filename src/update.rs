@@ -170,8 +170,8 @@ pub fn read_update_state() -> Result<UpdateState> {
     if !path.exists() {
         return Ok(UpdateState::default());
     }
-    let content = std::fs::read_to_string(&path)
-        .with_context(|| format!("Impossible de lire {:?}", path))?;
+    let content =
+        std::fs::read_to_string(&path).with_context(|| format!("Impossible de lire {:?}", path))?;
     let state: UpdateState =
         serde_json::from_str(&content).context("Impossible de parser l'état de mise à jour")?;
     Ok(state)
