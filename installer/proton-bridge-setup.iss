@@ -2,7 +2,7 @@
 ; Compilation : iscc proton-bridge-setup.iss
 
 #define MyAppName "Proton Bridge"
-#define MyAppVersion "0.1.0"
+#define MyAppVersion "0.2.0"
 #define MyAppPublisher "Proton Bridge"
 #define MyAppURL "https://github.com/Glawnn/proton-bridge"
 #define MyAppExeName "proton-bridge.exe"
